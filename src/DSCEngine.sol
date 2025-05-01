@@ -249,7 +249,7 @@ contract DSCEngine is ReentrancyGuard {
         uint256 debtToCover
     ) external moreThanZero(debtToCover) nonReentrant {
         uint256 startingUserHealthFactor = _healthFactor(user);
-        if (startingUserHealthFactor < MIN_HEALTH_FACTOR) {
+        if (startingUserHealthFactor > MIN_HEALTH_FACTOR) {
             revert DSCEngine__HealthFactorOk();
         }
         uint256 tokenAmountFromDebtCovered = getTokenAmountFromUsd(
@@ -335,9 +335,8 @@ contract DSCEngine is ReentrancyGuard {
             uint256 totalDscMinted,
             uint256 collateralValueInUsd
         ) = _getAccountInformation(user);
-        if (totalDscMinted == 0) {
-            return type(uint256).max; // This represents a very high number (indicating perfect health)
-        }
+        if (totalDscMinted == 0) return type(uint256).max;
+
         uint256 collateralAdjustedForThreshold = (collateralValueInUsd *
             LIQUIDATION_THRESHOLD) / LIQUIDATION_PRECISION;
         return (collateralAdjustedForThreshold * PRECISION) / totalDscMinted;

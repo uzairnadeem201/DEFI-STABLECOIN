@@ -17,6 +17,7 @@ contract DSCEngineTest is Test {
     address ethUsdPriceFeed;
     address btcUsdPriceFeed;
     address public USER = makeAddr("user");
+    address public USER2 = makeAddr("user2");
     uint256 public constant AMOUNT_COLLATERAL = 10 ether;
     uint256 public constant STARTING_ERC20_BALANCE = 10 ether;
 
@@ -27,6 +28,7 @@ contract DSCEngineTest is Test {
             .activeNetworkConfig();
 
         ERC20Mock(weth).mint(USER, STARTING_ERC20_BALANCE);
+        ERC20Mock(weth).mint(USER2, 1 ether);
     }
 
     ////////////////////////////
@@ -121,7 +123,7 @@ contract DSCEngineTest is Test {
         assertEq(expectedDscBalance, dscAmountToMint);
     }
 
-    function testHealthFactor() public depositedCollateral {
+    function testHealthFactorBreaks() public depositedCollateral {
         uint256 dscAmountToMint = 100000e18;
         vm.startPrank(USER);
         vm.expectRevert(
@@ -169,5 +171,40 @@ contract DSCEngineTest is Test {
         );
 
         vm.stopPrank();
+    }
+
+    function testGetHealthFactor() public depositedCollateral {
+        uint256 dscAmountToMint = 1000e18;
+        vm.startPrank(USER);
+        dsce.mintDsc(dscAmountToMint);
+        vm.stopPrank();
+        uint256 healthFactor = dsce.getHealthFactor(USER);
+        assertGt(healthFactor, 1e18);
+    }
+
+    function testHealthFactorIsOk() public depositedCollateral {
+        vm.expectRevert(DSCEngine.DSCEngine__HealthFactorOk.selector);
+        dsce.liquidate(weth, USER, 1000e18);
+    }
+
+    function testLiquadation() public depositedCollateral {
+        vm.startPrank(USER2);
+        ERC20Mock(weth).approve(address(dsce), 1 ether);
+        dsce.depositCollateral(weth, 1 ether);
+        vm.stopPrank();
+        uint256 dscAmountToMint = 500e18;
+        vm.startPrank(USER2);
+        dsce.mintDsc(dscAmountToMint);
+        vm.stopPrank();
+        uint256 beforeBalance = ERC20Mock(weth).balanceOf(USER);
+        vm.startPrank(USER);
+        dscAmountToMint = 500e18;
+        dsce.mintDsc(dscAmountToMint);
+        dsc.approve(address(dsce), 500e18);
+        dsce.liquidate(weth, USER2, 500e18);
+        vm.stopPrank();
+        (uint256 mintedCoin, ) = dsce.getAccountInformation(USER2);
+        assertEq(mintedCoin, 0);
+        assertLt(beforeBalance, ERC20Mock(weth).balanceOf(USER));
     }
 }
